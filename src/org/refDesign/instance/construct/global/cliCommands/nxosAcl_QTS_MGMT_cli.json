@@ -6,7 +6,14 @@
 	"item" : {
 		"@ref" : "/org/instance/construct/global/conceptItem/NXOS_IpAcl.json"
 	},
-	"cliCommands": [],
+	"cliCommands": [		"ip access-list QTS_MGMT",
+		"  statistics per-entry",
+		"  10 permit ip 192.168.20.0/24 any",
+		"  {%- for entry in acl.QTS_MGMT.entries %}",
+		"  {{entry}}",
+		"  {%- endfor %}",
+		"  999 deny ip any any"
+],
 	"advanced": {
 		"filter": null
 	}
