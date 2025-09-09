@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<projectDescription>
+	<name>cmk-feature-acl</name>
+	<comment></comment>
+	<projects>
+	</projects>
+	<buildSpec>
+		<buildCommand>
+			<name></name>
+			<arguments>
+				<dictionary>
+					<key>CURRORG</key>
+					<value>lab1</value>
+				</dictionary>
+				<dictionary>
+					<key>ORG</key>
+					<value>src</value>
+				</dictionary>
+				<dictionary>
+					<key>SYS</key>
+					<value>src</value>
+				</dictionary>
+			</arguments>
+		</buildCommand>
+	</buildSpec>
+	<natures>
+		<nature>com.gluenetworks.eclipse.jtype.editor.networkNature</nature>
+	</natures>
+</projectDescription>

@@ -1,0 +1,25 @@
+{
+	"@Info": {
+		"displayName": "ACLs",
+		"description": "ACL locAlloc Augmentation",
+		"hidden": true,
+		"augments": {
+			"/sys/type/construct/domain/location.jtype": {
+				"locationAllocations": {
+					"properties": {
+						"type": "global",
+						"name": "ACL"
+					}
+				}
+			}
+		}
+	},
+	"acl@Display.label": "Access Control Lists",
+	"acl": {
+		"@Complete.allType": {
+			"@Display.addLabel": "Add Access Control List",
+			"entries@Display.label": "ACL Entries",
+			"entries": []
+		}
+	}
+}

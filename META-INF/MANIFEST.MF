@@ -1,0 +1,9 @@
+Manifest-Version: 1.0
+Bundle-Description: Provision Access Control Lists on Cisco NXOS netwo
+ rk devices. 
+Bundle-SymbolicName: NIB.9a78bdfc-7667-4811-a54c-82664e8e8711.plugin
+Bundle-Version: 0.0.1.qualifier
+Bundle-Name: CMK-Feature-ACL
+Bundle-ManifestVersion: 2
+NIB-Control-Type: Package
+

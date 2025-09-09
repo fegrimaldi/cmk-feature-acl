@@ -1,0 +1,18 @@
+{
+	"@type": {
+		"ref": "/sys/type/construct/global/cliCommandGroup.jtype"
+	},
+	"@id": "f4f27926-5854-4d51-a986-b4e8688b81b8",
+	"regEx": ".+",
+	"ignoreDelete": true,
+	"cliBlocks": {
+		"@ref": [
+			"/org/instance/construct/global/cliCommands/nxosAcl_QTS_SNMP_cli.json"
+		]
+	},
+	"advanced": {},
+	"maskCommands": [],
+	"removeSyntax": {
+		"list": []
+	}
+}

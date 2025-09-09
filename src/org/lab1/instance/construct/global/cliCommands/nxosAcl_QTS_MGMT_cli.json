@@ -1,0 +1,13 @@
+{
+	"@type" : {
+		"ref" : "/sys/type/construct/global/cliCommands.jtype"
+	},
+	"@id" : "fed1d65c-4536-4987-9545-2c69a522cd1b",
+	"item" : {
+		"@ref" : "/org/instance/construct/global/conceptItem/NXOS_IpAcl.json"
+	},
+	"cliCommands": [],
+	"advanced": {
+		"filter": null
+	}
+}

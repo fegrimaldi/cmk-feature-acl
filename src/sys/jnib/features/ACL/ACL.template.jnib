@@ -1,0 +1,303 @@
+//export default {
+  /**
+   ** Copyright (C) 2022 Gluware - All Rights Reserved
+   ** This feature package is provided as is with no implied warranties or fitness for a particular purpose.
+   ** Gluware, Inc. will not provide maintenance, support, updates, enhancements or modifications.
+   */
+
+  /**
+   * TODO Provide help for the featureTag variable.
+   */
+  featureTag: "ACL",
+
+  /**
+   ** featureParams currently supports two items: concept and portMap.
+   *  concept is that path to the featureConcept global. That's the CLI model for this customQos template feature.
+   *  portMap is the path to the abstraction map global. This is used to model all the interfaces involved in
+   *  the template in order to call/refer to them by name. That allows deploying the same feature across platform with a
+   *  different port/interface layout. For instance, for a firewall using wan, lan and dmz as ports for the physical
+   *  appliance vs port1, port2 and port3 for the virtual edition, the abstraction map can declare these three interfaces
+   *  and calling them by name in the CLI under $context.intfs (for ex. $context.intfs.DATA or $context.intfs.ISP).
+   *
+   */
+  featureParams: {},
+
+  initFeature: function () {
+    /**
+     * TODO (optional): Add the pre processing code for the feature here.
+     * This function will be executed before the processFeature function. This is useful when
+     * conditional concept files need to be used. The concept file will be loaded dynamically.
+     * For instance, when vendor and/or hardware abstraction is required:
+     ** switch (node.vendor) {
+     **  case "cisco":
+     ** 	thisNib.featureParams.concept = "/org/instance/construct/global/featureConcept/qosFeatureConcept_for_Cisco.json";
+     ** 	break;
+     **  case "juniper"
+     **  	thisNib.featureParams.concept = "/org/instance/construct/global/featureConcept/qosFeatureConcept_for_Juniper.json";
+     **  	break;
+     ** }
+     */
+  },
+
+  processFeature: function () {
+    if (util.isEmpty(node.site)) {
+      log.warning(
+        "ACL: node.site is empty or missing; skipping site-based resolution."
+      );
+      return;
+    }
+
+    // 1) Try to discover the hierarchy path from several likely properties
+    var hierarchyPath = null;
+    var hierarchySource = null;
+
+    function pickPath(value, sourceName) {
+      if (!hierarchyPath && typeof value === "string" && value.length > 0) {
+        hierarchyPath = value;
+        hierarchySource = sourceName;
+      }
+    }
+
+    // 2) Common candidates we've seen
+    pickPath(node.site.path, "node.site.path");
+    pickPath(node.site.hierarchyPath, "node.site.hierarchyPath");
+    pickPath(node.site.locationPath, "node.site.locationPath");
+    pickPath(node.site.breadcrumbs, "node.site.breadcrumbs");
+    pickPath(node.site.sitePath, "node.site.sitePath");
+
+    // Sometimes the path lives under @source
+    if (node.site["@source"]) {
+      pickPath(node.site["@source"].path, 'node.site["@source"].path');
+      pickPath(
+        node.site["@source"].hierarchyPath,
+        'node.site["@source"].hierarchyPath'
+      );
+    }
+
+    // 3) If still unknown, load the DM Site JSON and try to read a path from there
+    var siteName =
+      node.site["@source"] && node.site["@source"].instanceName
+        ? node.site["@source"].instanceName
+        : null;
+
+    if (!siteName) {
+      log.warning(
+        'ACL: node.site["@source"].instanceName missing; cannot build DM site path.'
+      );
+    }
+
+    var dmSitePath = siteName
+      ? "/org/instance/entity/Site/" + siteName + ".json"
+      : null;
+
+    function loadSafe(pathStr, label) {
+      try {
+        var data = loadRef(pathStr);
+        log.info("ACL: Loaded " + label + " from: " + pathStr);
+        return data || {};
+      } catch (e) {
+        log.info(
+          "ACL: " +
+            label +
+            " not found at: " +
+            pathStr +
+            " — continuing. Error: " +
+            e
+        );
+        return {};
+      }
+    }
+
+    var nodeSiteData = {};
+    if (dmSitePath) {
+      nodeSiteData = loadSafe(dmSitePath, "device manager site");
+      // Attempt to harvest a path-like field from the DM data
+      if (nodeSiteData) {
+        pickPath(nodeSiteData.path, "DM site JSON: path");
+        pickPath(nodeSiteData.hierarchyPath, "DM site JSON: hierarchyPath");
+        pickPath(nodeSiteData.locationPath, "DM site JSON: locationPath");
+        pickPath(nodeSiteData.breadcrumbs, "DM site JSON: breadcrumbs");
+        pickPath(nodeSiteData.sitePath, "DM site JSON: sitePath");
+      }
+    }
+
+    if (!hierarchyPath) {
+      log.warning(
+        "ACL: No hierarchy path discovered from any known property. Will skip parent lookups."
+      );
+    } else {
+      log.warning(
+        'ACL: Using hierarchy path from "' +
+          hierarchySource +
+          '": ' +
+          hierarchyPath
+      );
+    }
+
+    // 4) Split path into parts and log them
+    var parts = [];
+    if (hierarchyPath) {
+      parts = hierarchyPath.split("/").filter(function (p) {
+        return p.length > 0;
+      });
+      try {
+        log.warning("ACL: Split parts => " + JSON.stringify(parts));
+      } catch (eParts) {
+        log.warning("ACL: Failed to stringify parts: " + eParts);
+      }
+    }
+
+    function constructPath(name) {
+      return "/org/instance/construct/domain/location/" + name + ".json";
+    }
+
+    // 5) Walk from top level down to one-before-device site, collect all ACL allocations
+    //    Then merge them (parents first, device-site last) so entries are concatenated and numerically sorted
+
+    // Helper: merge two ACL allocation objects of the form { KEY: { entries: [ ... ] }, ... }
+    function mergeTwoAclObjectsES6(a, b) {
+      var aObj = a || {};
+      var bObj = b || {};
+
+      // Build a union of keys from aObj and bObj without using Set/Array.from (engine limitation)
+      var keys = [];
+      var ka = Object.keys(aObj);
+      for (var i = 0; i < ka.length; i++) {
+        if (keys.indexOf(ka[i]) === -1) keys.push(ka[i]);
+      }
+      var kb = Object.keys(bObj);
+      for (var j = 0; j < kb.length; j++) {
+        if (keys.indexOf(kb[j]) === -1) keys.push(kb[j]);
+      }
+
+      // Reduce into merged object with numerically sorted entries per key
+      var merged = keys.reduce(function (acc, key) {
+        var e1 = (aObj[key] && aObj[key].entries) || [];
+        var e2 = (bObj[key] && bObj[key].entries) || [];
+        acc[key] = {
+          entries: e1.concat(e2).sort(function (x, y) {
+            // Sort by the leading numeric token (e.g., "200 permit ...")
+            var nx = parseInt(String(x).split(" ")[0], 10);
+            var ny = parseInt(String(y).split(" ")[0], 10);
+            if (isNaN(nx)) nx = 0;
+            if (isNaN(ny)) ny = 0;
+            return nx - ny;
+          }),
+        };
+        return acc;
+      }, {});
+
+      return merged;
+    }
+
+    // Helper: merge a list of ACL allocation objects left-to-right
+    function mergeManyAclObjectsES6(list) {
+      var out = {};
+      for (var i = 0; i < list.length; i++) {
+        out = mergeTwoAclObjectsES6(out, list[i]);
+      }
+      return out;
+    }
+
+    var collectedAcls = []; // will hold every allocations.acl found along the hierarchy
+
+    var pickedName = null;
+
+    if (parts.length >= 2) {
+      for (var i = 0; i < parts.length - 1; i++) {
+        var levelName = parts[i];
+        var cPath = constructPath(levelName);
+        log.info(
+          "ACL: Checking construct allocation at: " +
+            cPath +
+            ' (level "' +
+            levelName +
+            '")'
+        );
+        var data = loadSafe(cPath, 'construct location "' + levelName + '"');
+        if (data.allocations && data.allocations.acl) {
+          collectedAcls.push(data.allocations.acl);
+          log.warning(
+            'ACL: Found allocations.acl at level "' +
+              levelName +
+              '". Will merge.'
+          );
+        } else {
+          log.info('ACL: No allocations.acl at level "' + levelName + '".');
+        }
+      }
+    } else if (parts.length === 1) {
+      log.info(
+        "ACL: Hierarchy has a single level; there are no parents to check."
+      );
+    } else {
+      log.info("ACL: No hierarchy parts; cannot check parents.");
+    }
+
+    // 6) Also include the device site allocations if present (applied last)
+    if (node.site.allocations && node.site.allocations.acl) {
+      collectedAcls.push(node.site.allocations.acl);
+      pickedName = siteName ? siteName : "device-site";
+      log.warning(
+        'ACL: Including node.site.allocations.acl from "' + pickedName + '".'
+      );
+    }
+
+    // 7) Merge all collected ACL objects (if any) or keep form defaults
+    if (collectedAcls.length > 0) {
+      var mergedAcl = mergeManyAclObjectsES6(collectedAcls);
+      thisNib.ref.acl = mergedAcl;
+      try {
+        log.warning(
+          "ACL: Applied MERGED ACL allocations from " +
+            collectedAcls.length +
+            " level(s)."
+        );
+      } catch (eMerge) {
+        log.warning(
+          "ACL: Applied MERGED ACL allocations (could not stringify count): " +
+            eMerge
+        );
+      }
+    } else {
+      log.info(
+        "ACL: No site-level ACLs found at any level; keeping form feature allocations."
+      );
+    }
+  },
+
+  postProcess: function () {
+    /**
+     *
+     * TODO (optional): Add all the processing required when deleting a node, such as cleaning up data in attached storage or similar, here.
+     * This method is optional.
+     */
+  },
+
+  deleteNode: function () {
+    /**
+     * TODO Need help here.
+     */
+  },
+
+  unprovision: function () {
+    /**
+     * TODO (optional): Add the processing required when the feature is being removed from the node assembly here.
+     * If you want the feature to become unmanaged (in other words, you want the associated CLI to be kept in the node
+     * but no longer handled by gluware, then remove the unprovision() call. However, if you want the feature to be
+     * also removed from the target node, then this is why the unprovision() call has been designed for.
+     * Remember that the rendering is always called after the expert code and the FSE will look into the node object
+     * store to see what objects needs to be rendered. If the object store is empty (because you don't do anything
+     * in the unprovision() method, and because the FSE works with a declarative approach, all the objects following
+     * the naming convention (and associated CLI commands) will be removed from the target node.
+     * This method is optional.
+     */
+  },
+
+  preview: function () {
+    /**
+     *  TODO (optional): Add the processing required when you want to make an output visible in the preview action here.
+     *	is called. This method is optional.
+     */
+  },
+//};

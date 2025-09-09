@@ -1,0 +1,20 @@
+{
+	"@type" : {
+		"ref" : "/sys/type/construct/feature/ACL.jtype"
+	},
+	"@id" : "32317ef3-d5bb-4a27-949b-2d3a5a512205",
+	"featureConcept" : {
+		"name" : "nxosACL",
+		"cliCommandGroups" : {
+			"@ref" : [
+				"/org/instance/construct/global/cliCommandGroup/nxosAcl_QTS_IPv4_VTY_cli_grp.json",
+				"/org/instance/construct/global/cliCommandGroup/nxosAcl_QTS_MGMT_cli_grp.json",
+				"/org/instance/construct/global/cliCommandGroup/nxosAcl_QTS_SNMP_cli_grp.json"
+			]
+		}
+	},
+	"form" : {
+		"acl" : {
+		}
+	}
+}
